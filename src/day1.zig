@@ -12,7 +12,7 @@ pub fn main() !void {
     const reader = br.reader().any();
 
     while (nextListPair(reader)) |list_pair| {
-        const dist = list_pair.calculateDist();
+        const dist = ListPair.calculateDist(list_pair);
         total_dist += dist;
     } else |err| {
         if (err != error.EndOfStream) {
@@ -30,8 +30,18 @@ const ListPair = struct {
     list1: [ARRSIZE]u32,
     list2: [ARRSIZE]u32,
 
-    fn calculateDist(self: *const ListPair) u32 {
+    fn new(list1: *[ARRSIZE]u32, list2: *[ARRSIZE]u32) ListPair {
+        std.mem.sort(u32, list1, {}, comptime std.sort.asc(u32));
+        std.mem.sort(u32, list2, {}, comptime std.sort.asc(u32));
+        return ListPair{
+            .list1 = list1.*,
+            .list2 = list2.*,
+        };
+    }
+
+    fn calculateDist(self: ListPair) u32 {
         std.debug.assert(self.list1.len == self.list2.len);
+
         const n = self.list1.len;
         var sum: u32 = 0;
 
@@ -60,10 +70,7 @@ fn nextListPair(reader: std.io.AnyReader) !ListPair {
                 if (!list1_full) {
                     continue;
                 }
-                return ListPair{
-                    .list1 = list1,
-                    .list2 = list2,
-                };
+                return ListPair.new(&list1, &list2);
             },
 
             else => {
@@ -100,15 +107,11 @@ fn asciiByteToU32(byte: u8) ?u32 {
 
 test "small test" {
     const expect = std.testing.expect;
-    var list1 = [5]u32{ 4, 2, 1, 3, 3 };
-    var list2 = [5]u32{ 3, 5, 3, 9, 3 };
-    const pair = ListPair{
-        .list1 = list1,
-        .list2 = list2,
-    };
+    var l1 = [5]u32{ 4, 2, 1, 3, 3 };
+    var l2 = [5]u32{ 3, 5, 3, 9, 3 };
 
-    std.mem.sort(u32, &list1, {}, comptime std.sort.asc(u32));
-    std.mem.sort(u32, &list2, {}, comptime std.sort.asc(u32));
-
-    try expect(11 == pair.calculateDist());
+    const pair = ListPair.new(&l1, &l2);
+    const dist = ListPair.calculateDist(pair);
+    print("dist: {d}\n", .{dist});
+    try expect(10 == dist);
 }

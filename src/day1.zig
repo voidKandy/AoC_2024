@@ -3,6 +3,7 @@
 // What you're doing wrong is that the input file is TWO lists, not 1000 pairs of lists
 
 const std = @import("std");
+const helpers = @import("./helpers.zig");
 const print = std.debug.print;
 
 pub fn main() !void {
@@ -82,11 +83,7 @@ const NumPair = struct {
             const min1 = minInSlice(self.list1[0..n]);
             const min2 = minInSlice(self.list2[0..n]);
 
-            if (min1[0] > min2[0]) {
-                sum += min1[0] - min2[0];
-            } else {
-                sum += min2[0] - min1[0];
-            }
+            sum += helpers.absDif(min1[0], min2[0]);
 
             self.list1[min1[1]] = 9999;
             self.list2[min2[1]] = 9999;
@@ -126,7 +123,7 @@ fn nextNumPair(reader: std.io.AnyReader) !NumPair {
                 push_to_list2 = true;
             },
             else => {
-                if (asciiByteToU32(byte)) |num| {
+                if (helpers.asciiByteToU32(byte)) |num| {
                     var wh = NumPair.List.one;
                     if (push_to_list2) {
                         wh = NumPair.List.two;
@@ -137,18 +134,6 @@ fn nextNumPair(reader: std.io.AnyReader) !NumPair {
         }
     } else |err| {
         return err;
-    }
-}
-
-fn asciiByteToU32(byte: u8) ?u32 {
-    switch (byte) {
-        48...57 => {
-            const n: u32 = @intCast(byte);
-            return n - 48;
-        },
-        else => {
-            return null;
-        },
     }
 }
 

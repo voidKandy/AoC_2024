@@ -43,10 +43,6 @@ fn nextReport(reader: std.io.AnyReader) !Report {
 
     while (reader.readByte()) |byte| {
         switch (byte) {
-            // whitespace
-            // '\n' => {
-            //     break;
-            // },
             ' ', '\n' => {
                 var num: u32 = 0;
                 // print("val buffer: {any}\n", .{val_buffer});
@@ -95,20 +91,24 @@ fn nextReport(reader: std.io.AnyReader) !Report {
 fn reportIsSafe(report: Report) bool {
     var prev: ?u32 = null;
     var is_asc: ?bool = null;
+    const allowed_mistakes: u32 = 1;
+    var mistakes: u32 = 0;
 
     for (report[0][0..report[1]]) |v| {
         if (prev) |p| {
             if (v < p) {
                 if (is_asc) |asc| {
                     if (asc) {
-                        return false;
+                        print("should be desc, mistakes + 1\n", .{});
+                        mistakes += 1;
                     }
                 }
                 is_asc = false;
             } else {
                 if (is_asc) |asc| {
                     if (!asc) {
-                        return false;
+                        print("should be asc, mistakes + 1\n", .{});
+                        mistakes += 1;
                     }
                 }
                 is_asc = true;
@@ -116,13 +116,20 @@ fn reportIsSafe(report: Report) bool {
             const dif = helpers.absDif(v, p);
 
             if (dif < 1 or dif > 3) {
-                return false;
+                print("out of bounds, mistakes + 1\n", .{});
+                mistakes += 1;
             }
+        }
+
+        print("mistakes: {d}\n", .{mistakes});
+        if (mistakes > allowed_mistakes) {
+            print("report: {any} failed!\n", .{report[0]});
+            return false;
         }
         prev = v;
     }
 
-    // print("report: {any} passed!\n", .{report[0]});
+    print("report: {any} passed!\n", .{report[0]});
 
     return true;
 }
@@ -164,15 +171,18 @@ test "small test" {
         [5]u32{ 1, 3, 6, 7, 9 },
     };
 
-    const expected = [_]bool{ true, false, false, false, false, true };
+    // const expected = [_]bool{ true, false, false, false, false, true };
+    const expected = [_]bool{ true, false, false, true, true, true };
 
     for (input, 0..) |a, i| {
         var arr = a;
         const report = Report{
             &arr,
-            6,
+            5,
         };
         const safe = reportIsSafe(report);
-        try expect(expected[i] == safe);
+        expect(expected[i] == safe) catch {
+            panic("expected {any} at idx {d}\n", .{ expected[i], i });
+        };
     }
 }

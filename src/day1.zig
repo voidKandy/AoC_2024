@@ -23,8 +23,10 @@ pub fn main() !void {
         }
     }
 
-    const dist = ListPair.calculateDist(&list_pair);
-    print("total dist: {d}\n", .{dist});
+    // const dist = ListPair.calculateDist(&list_pair);
+    // print("total dist: {d}\n", .{dist});
+    const sim = ListPair.calculateSim(&list_pair);
+    print("total sim: {d}\n", .{sim});
 
     return;
 }
@@ -59,13 +61,25 @@ const ListPair = struct {
         return;
     }
 
+    fn calculateSim(self: *ListPair) u64 {
+        var sim_score: u64 = 0;
+
+        for (0..self.len) |i| {
+            const v = self.list1[i];
+            const v64: u64 = @intCast(v);
+            const n = occurences(v, &self.list2, self.len);
+            sim_score += v64 * n;
+        }
+
+        return sim_score;
+    }
+
     fn calculateDist(self: *ListPair) u64 {
-        var sum: u32 = 0;
+        var sum: u64 = 0;
 
         for (0..self.len) |_| {
             const min1 = minInSlice(self.list1[0..self.len]);
             const min2 = minInSlice(self.list2[0..self.len]);
-            // print("dist between {any} and {any}\n", .{ min1, min2 });
             sum += helpers.absDif(min1[0], min2[0]);
 
             self.list1[min1[1]] = std.math.maxInt(u32);
@@ -75,6 +89,17 @@ const ListPair = struct {
         return sum;
     }
 };
+
+fn occurences(v: u32, list: []const u32, len: usize) u32 {
+    var sum: u32 = 0;
+    for (0..len) |i| {
+        const val = list[i];
+        if (v == val) {
+            sum += 1;
+        }
+    }
+    return sum;
+}
 
 const MinTuple = std.meta.Tuple(&.{ u32, usize });
 fn minInSlice(list: []const u32) MinTuple {
@@ -153,17 +178,28 @@ fn nextNumPair(reader: std.io.AnyReader) !NumPair {
 test "small test" {
     const expect = std.testing.expect;
 
-    const l1 = [5]u32{ 4, 2, 1, 3, 3 };
-    const l2 = [5]u32{ 3, 5, 3, 9, 3 };
+    const l1 = [_]u32{ 3, 4, 2, 1, 3, 3 };
+    const l2 = [_]u32{ 4, 3, 5, 3, 9, 3 };
 
     var pair = ListPair.new();
 
-    for (0..5) |i| {
+    for (0..6) |i| {
         const npair = NumPair{ l1[i], l2[i] };
         pair.push(npair);
     }
 
     const dist = ListPair.calculateDist(&pair);
-    print("dist: {d}\n", .{dist});
-    try expect(10 == dist);
+
+    var newpair = ListPair.new();
+
+    for (0..6) |i| {
+        const npair = NumPair{ l1[i], l2[i] };
+        newpair.push(npair);
+    }
+    const sim = ListPair.calculateSim(&newpair);
+
+    try expect(11 == dist);
+    if (31 != sim) {
+        std.debug.panic("expected 31, got {d}\n", .{sim});
+    }
 }

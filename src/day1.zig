@@ -31,6 +31,7 @@ const ListPair = struct {
     list2: [ARRSIZE]u32,
 
     fn new(list1: *[ARRSIZE]u32, list2: *[ARRSIZE]u32) ListPair {
+        std.debug.assert(list1.len == list2.len);
         std.mem.sort(u32, list1, {}, comptime std.sort.asc(u32));
         std.mem.sort(u32, list2, {}, comptime std.sort.asc(u32));
         return ListPair{
@@ -40,8 +41,6 @@ const ListPair = struct {
     }
 
     fn calculateDist(self: ListPair) u32 {
-        std.debug.assert(self.list1.len == self.list2.len);
-
         const n = self.list1.len;
         var sum: u32 = 0;
 

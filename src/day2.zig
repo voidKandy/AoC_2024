@@ -43,6 +43,10 @@ fn nextReport(reader: std.io.AnyReader) !Report {
 
     while (reader.readByte()) |byte| {
         switch (byte) {
+            // whitespace
+            // '\n' => {
+            //     break;
+            // },
             ' ', '\n' => {
                 var num: u32 = 0;
                 // print("val buffer: {any}\n", .{val_buffer});
@@ -89,26 +93,27 @@ fn nextReport(reader: std.io.AnyReader) !Report {
 }
 
 fn reportIsSafe(report: Report) bool {
+    print("checking report: {any}\n", .{report});
     var prev: ?u32 = null;
     var is_asc: ?bool = null;
-    const allowed_mistakes: u32 = 1;
-    var mistakes: u32 = 0;
 
     for (report[0][0..report[1]]) |v| {
+        var mistakes: u8 = 0;
+        print("checking val: {d}\nprev: {any}\n", .{ v, prev });
         if (prev) |p| {
             if (v < p) {
                 if (is_asc) |asc| {
                     if (asc) {
-                        print("should be desc, mistakes + 1\n", .{});
                         mistakes += 1;
+                        // return false;
                     }
                 }
                 is_asc = false;
             } else {
                 if (is_asc) |asc| {
                     if (!asc) {
-                        print("should be asc, mistakes + 1\n", .{});
                         mistakes += 1;
+                        // return false;
                     }
                 }
                 is_asc = true;
@@ -116,20 +121,21 @@ fn reportIsSafe(report: Report) bool {
             const dif = helpers.absDif(v, p);
 
             if (dif < 1 or dif > 3) {
-                print("out of bounds, mistakes + 1\n", .{});
                 mistakes += 1;
+                // return false;
             }
         }
 
         print("mistakes: {d}\n", .{mistakes});
-        if (mistakes > allowed_mistakes) {
-            print("report: {any} failed!\n", .{report[0]});
+
+        if (mistakes == 0) {
+            prev = v;
+        } else if (mistakes > 1) {
             return false;
         }
-        prev = v;
     }
 
-    print("report: {any} passed!\n", .{report[0]});
+    // print("report: {any} passed!\n", .{report[0]});
 
     return true;
 }
@@ -161,7 +167,7 @@ test "input test" {
 }
 
 test "small test" {
-    const expect = std.testing.expect;
+    // const expect = std.testing.expect;
     const input = [_][5]u32{
         [5]u32{ 7, 6, 4, 2, 1 },
         [5]u32{ 1, 2, 7, 8, 9 },
@@ -181,8 +187,8 @@ test "small test" {
             5,
         };
         const safe = reportIsSafe(report);
-        expect(expected[i] == safe) catch {
+        if (expected[i] != safe) {
             panic("expected {any} at idx {d}\n", .{ expected[i], i });
-        };
+        }
     }
 }

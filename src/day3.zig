@@ -14,12 +14,13 @@ pub fn main() !void {
 
     var total: u32 = 0;
     var lexer = Lexer.new(input);
-    while (lexer.peek()) |_| {
-        if (nextValidMul(&lexer)) |m| {
-            var mul = m;
-            const v = MulPair.multiply(&mul);
-            total += v;
-        }
+    const all_muls = allMul(&lexer, allocator);
+    defer all_muls.deinit();
+
+    for (all_muls.items) |m| {
+        var mul = m;
+        const v = MulPair.multiply(&mul);
+        total += v;
     }
     print("total: {d}\n", .{total});
     return;
@@ -62,11 +63,15 @@ const Lexer = struct {
 const BUFSIZE = 16;
 const MulPair = struct {
     str: [BUFSIZE]u8,
+    disable: bool,
     openidx: usize,
     closeidx: usize,
     commaidx: usize,
 
     fn multiply(self: *MulPair) u32 {
+        if (self.disable) {
+            return 0;
+        }
         var val_buffer: [VALBUFFER_SIZE]?u32 = undefined;
         @memset(&val_buffer, null);
         var val_buffer_len: u32 = 0;
@@ -88,7 +93,6 @@ const MulPair = struct {
         }
 
         const second_num = u32FromValueBuffer(&val_buffer, &val_buffer_len);
-        print("first num: {d}\nsecond num: {d}\n", .{ first_num, second_num });
         return first_num * second_num;
     }
 };
@@ -107,7 +111,6 @@ fn u32FromValueBuffer(val_buffer: *[VALBUFFER_SIZE]?u32, len: *u32) u32 {
             }
 
             const val: u32 = v * factor;
-            // print("new num += {d}\n", .{val});
             num += val;
             val_buffer[i] = null;
         } else {
@@ -117,7 +120,57 @@ fn u32FromValueBuffer(val_buffer: *[VALBUFFER_SIZE]?u32, len: *u32) u32 {
     return num;
 }
 
-fn nextValidMul(lexer: *Lexer) ?MulPair {
+fn checkDoOrDont(lexer: *Lexer, disable: *bool) void {
+    if (lexer.ch != 'd') {
+        return;
+    }
+    var buf: [6]u8 = undefined;
+    @memset(&buf, 0);
+    var buflen: usize = 0;
+
+    while (lexer.peek()) |next| {
+        if (lexer.ch == ')') {
+            switch (buflen) {
+                3 => disable.* = false,
+                6 => disable.* = true,
+                else => {},
+            }
+            return;
+        }
+        const next_valid = switch (lexer.ch) {
+            'd' => next == 'o',
+            'o' => next == 'n' or next == '(',
+            'n' => next == '\'',
+            '\'' => next == 't',
+            't' => next == '(',
+            '(' => next == ')',
+            else => false,
+        };
+
+        if (next_valid) {
+            buf[buflen] = lexer.ch;
+            buflen += 1;
+            lexer.progress();
+        } else {
+            return;
+        }
+    }
+}
+
+fn allMul(lexer: *Lexer, allocator: std.mem.Allocator) std.ArrayList(MulPair) {
+    var buffer = std.ArrayList(MulPair).init(allocator);
+    var disable = false;
+    while (lexer.peek()) |_| {
+        if (nextValidMul(lexer, &disable)) |m| {
+            buffer.append(m) catch |err| {
+                panic("error appending: {any}", .{err});
+            };
+        }
+    }
+    return buffer;
+}
+
+fn nextValidMul(lexer: *Lexer, disable: *bool) ?MulPair {
     var openparen: ?usize = null;
     var comma: ?usize = null;
     var buf: [BUFSIZE]u8 = undefined;
@@ -126,18 +179,21 @@ fn nextValidMul(lexer: *Lexer) ?MulPair {
 
     while (lexer.peek()) |next| {
         switch (lexer.ch) {
+            'd' => {
+                checkDoOrDont(lexer, disable);
+            },
             ',' => comma = buflen,
             '(' => openparen = buflen,
             ')' => {
                 if (std.mem.eql(u8, buf[0..3], "mul") and buflen > 0) {
                     buf[buflen] = lexer.ch;
                     const pair = MulPair{
+                        .disable = disable.*,
                         .str = buf,
                         .openidx = openparen orelse return null,
                         .closeidx = buflen,
                         .commaidx = comma orelse return null,
                     };
-                    print("returnin buf: {s}\n", .{buf});
                     return pair;
                 }
             },
@@ -171,15 +227,24 @@ fn nextValidMul(lexer: *Lexer) ?MulPair {
 
 test "small test" {
     const expect = std.testing.expect;
-    const input = "xmul(2,4)%&mul[3,7]select(255,530)!@^do_not_mul(5,5)jj2muL( 2 , h)mul(4 , 5 )+mul(32,64]then(mul(11,8)mul(8,5))";
-    const expected: u32 = 161;
+    _ = expect;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const input = "xmul(2,4)&mul[3,7]!^don't()_mul(5,5)+mul(32,64](mul(11,8)undo()?mul(8,5))";
+    const expected: u32 = 48;
     var total: u32 = 0;
     var lexer = Lexer.new(input);
-    while (nextValidMul(&lexer)) |m| {
+    const all_muls = allMul(&lexer, allocator);
+    defer all_muls.deinit();
+
+    for (all_muls.items) |m| {
         var mul = m;
         const v = MulPair.multiply(&mul);
         total += v;
     }
-    try expect(total == expected);
-    // var sum: u32 = 0;
+    if (total != expected) {
+        panic("expected: {d}\ngot: {d}\n", .{ expected, total });
+    }
 }

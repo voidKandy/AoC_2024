@@ -11,6 +11,11 @@ pub fn main() !void {
         panic("error getting input: {any}\n", .{err});
     };
     defer allocator.free(input);
+    const dims = getDims(input);
+    var cells = strToCells(input, &dims, allocator);
+    defer cells.deinit();
+    const occ = allOccurences(&cells, "XMAS");
+    print("occurences: {d}\n", .{occ});
 
     return;
 }

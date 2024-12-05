@@ -51,8 +51,13 @@ const GridCell = struct {
     dims: *const Coords,
 
     fn countCellOccurences(self: *GridCell, map: *const std.AutoHashMap(Coords, GridCell), substr: []const u8) u32 {
-        print("counting for cell char: {c} {d}.{d}\n", .{ self.ch, self.coords[0], self.coords[1] });
+        const pattern_pos = 0;
         var all: u32 = 0;
+        print("counting for cell char: {c} {d}.{d}\n", .{ self.ch, self.coords[0], self.coords[1] });
+        if (self.ch != substr[pattern_pos]) {
+            return all;
+        }
+
         var allocbuffer: [16]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&allocbuffer);
         const allocator = fba.allocator();
@@ -60,19 +65,16 @@ const GridCell = struct {
             panic("failed to dupe", .{});
         };
         defer allocator.free(buffer);
-        @memset(buffer, 0);
-
-        const pattern_pos = helpers.posInString(self.ch, &substr) orelse panic("ch: {c} not in str: {s}\n", .{ self.ch, substr });
 
         const neighbors: [8]?Coords = self.neighborCoords();
         print("got neighbors: {any}\n", .{neighbors});
 
-        var invert_code = false;
         for (neighbors, 0..) |nopt, c| {
             @memset(buffer, 0);
             buffer[pattern_pos] = self.ch;
+            var next_expected_char_idx: u32 = pattern_pos + 1;
             if (nopt) |ncoord| {
-                var code: u8 = @intCast(c);
+                const code: u8 = @intCast(c);
                 const str = switch (code) {
                     NR => "NR",
                     NL => "NL",
@@ -84,78 +86,37 @@ const GridCell = struct {
                     NBR => "NBR",
                     else => "other",
                 };
-                var n = map.get(ncoord) orelse continue;
-                const n_pattern_pos = helpers.posInString(n.ch, &substr) orelse continue;
-                const dif = helpers.absDif(n_pattern_pos, pattern_pos);
-                print("{s} with char {c} dif: {d}\n", .{ str, n.ch, dif });
+                print("neighbor iter: {any} - {s}\n", .{ ncoord, str });
 
-                if (dif == 1) {
-                    print("checking neighbor: {c}\n", .{n.ch});
-                    buffer[n_pattern_pos] = n.ch;
+                var n = map.get(ncoord) orelse {
+                    continue;
+                };
 
-                    var ascending = n_pattern_pos > pattern_pos;
-                    var next_expected_char_idx: u32 = undefined;
+                print("{c}\n", .{n.ch});
 
-                    if (n_pattern_pos == substr.len - 1 or n_pattern_pos == 0) {
-                        if (std.mem.eql(u8, buffer, substr)) {
-                            all += 1;
-                            print("found! {d}\n", .{all});
-                            continue;
-                        } else if (n_pattern_pos == 0) {
-                            next_expected_char_idx = pattern_pos + 1;
-                            ascending = true;
-                        } else if (n_pattern_pos == substr.len - 1) {
-                            next_expected_char_idx = pattern_pos - 1;
-                            ascending = false;
-                        }
-                        invert_code = !invert_code;
-                    } else {
-                        next_expected_char_idx = switch (ascending) {
-                            true => n_pattern_pos + 1,
-                            false => n_pattern_pos - 1,
-                        };
-                    }
-
-                    if (next_expected_char_idx >= substr.len) {
-                        print("breaking, expected char too large: {d}\n", .{next_expected_char_idx});
-                        continue;
-                    }
-
-                    if (invert_code) {
-                        code = invertNeighborCode(code);
-                    }
+                if (next_expected_char_idx < substr.len and n.ch == substr[next_expected_char_idx]) {
+                    buffer[next_expected_char_idx] = n.ch;
+                    print("neighbor expected, buffer updated: {s}\n", .{buffer});
 
                     var child_neighbors = GridCell.neighborCoords(&n);
                     var child_coords = (child_neighbors[code]) orelse continue;
-
-                    while (true) {
+                    var checking_children = true;
+                    while (checking_children) {
                         var child_neighbor = (map.get(child_coords)) orelse break;
                         child_neighbors = GridCell.neighborCoords(&child_neighbor);
                         print("current child: ({d},{d}) - {c}\n", .{ child_neighbor.coords[0], child_neighbor.coords[1], child_neighbor.ch });
                         print("neighbors: {any}\n", .{child_neighbors});
 
+                        next_expected_char_idx += 1;
                         if (next_expected_char_idx < substr.len and child_neighbor.ch == substr[next_expected_char_idx]) {
                             buffer[next_expected_char_idx] = child_neighbor.ch;
                             print("child was expected, buffer updated: {s}\n", .{buffer});
 
                             if (std.mem.eql(u8, buffer, substr)) {
                                 all += 1;
+                                checking_children = false;
                                 print("found! {d}\n", .{all});
                                 break;
-                            } else {
-                                if (ascending) {
-                                    if (next_expected_char_idx == substr.len - 1) {
-                                        print("too large\n", .{});
-                                        break;
-                                    }
-                                    next_expected_char_idx += 1;
-                                } else {
-                                    if (next_expected_char_idx == 0) {
-                                        print("too small\n", .{});
-                                        break;
-                                    }
-                                    next_expected_char_idx -= 1;
-                                }
                             }
                         } else {
                             break;
@@ -286,18 +247,23 @@ fn getNeighbor(coords: *const Coords, code: u8) Coords {
 fn getDims(str: []const u8) Coords {
     var height: u32 = 1;
     var width: u32 = 0;
+    var width_bound: ?u32 = null;
 
     for (str) |ch| {
-        if (ch == '\n') {
+        if (std.ascii.isWhitespace(ch)) {
             height += 1;
+            if (width_bound == null) {
+                width_bound = width;
+            }
             width = 0;
         } else {
             width += 1;
         }
     }
 
-    print("got dims w: {d} h: {d}\n", .{ width, height });
-    return Coords{ width, height };
+    print("got dims w: {any} h: {d}\n", .{ width_bound, height });
+
+    return Coords{ width_bound orelse unreachable, height };
 }
 
 fn allOccurences(map: *std.AutoHashMap(Coords, GridCell), substr: []const u8) u32 {
@@ -309,8 +275,10 @@ fn allOccurences(map: *std.AutoHashMap(Coords, GridCell), substr: []const u8) u3
     while (true) {
         const key = Coords{ char, line };
         var cell = map.get(key) orelse break;
-        all += cell.countCellOccurences(map, substr);
-        defer _ = map.remove(key);
+        if (cell.ch == substr[0]) {
+            all += cell.countCellOccurences(map, substr);
+            _ = map.remove(key);
+        }
 
         if (char == cell.dims[0]) {
             char = 1;
@@ -331,32 +299,52 @@ fn strToCells(str: []const u8, dims: *const Coords, allocator: std.mem.Allocator
     var map = std.AutoHashMap(Coords, GridCell).init(allocator);
     var line_no: u32 = 1;
     var char_no: u32 = 1;
-    var char_bounds: u32 = 0;
 
     for (str) |ch| {
-        if (ch == '\n') {
+        if (std.ascii.isWhitespace(ch)) {
             line_no += 1;
-            char_bounds = char_no;
             char_no = 1;
             continue;
-        } else {
-            map.put(Coords{ char_no, line_no }, GridCell{
-                .coords = Coords{ char_no, line_no },
-                .ch = ch,
-                .dims = dims,
-            }) catch |err| {
-                panic("error appending: {any}\n", .{err});
-            };
-            char_no += 1;
         }
+        const coords = Coords{ char_no, line_no };
+        const cell = GridCell{
+            .coords = Coords{ char_no, line_no },
+            .ch = ch,
+            .dims = dims,
+        };
+        map.put(coords, cell) catch |err| {
+            panic("error appending: {any}\n", .{err});
+        };
+        char_no += 1;
     }
 
     return map;
 }
 
+fn printMap(map: *const std.AutoHashMap(Coords, GridCell)) void {
+    var iter = map.iterator();
+    const dims = iter.next().?.value_ptr.dims;
+    for (1..dims[0]) |x| {
+        for (1..dims[1]) |y| {
+            const w: u32 = @intCast(x);
+            const h: u32 = @intCast(y);
+            const key = Coords{ w, h };
+            print("Key: ({d}, {d})\n", .{
+                x,
+                y,
+            });
+
+            if (map.get(key)) |v| {
+                print("Val: {c}\n", .{v.ch});
+            } else {
+                print("not present\n", .{});
+            }
+        }
+    }
+}
+
 test "cell test" {
-    const expect = std.testing.expect;
-    _ = expect;
+    // const expect = std.testing.expect;
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
 
@@ -367,6 +355,7 @@ test "cell test" {
         \\MSAMXMSMSA
         \\AMXSXMAAMM
         \\MSAMASMSMX
+        \\XMASAMXAMM
     ;
 
     const dims = getDims(input);
@@ -398,13 +387,17 @@ test "cell test" {
         }
     }
 
-    if (cells.get(Coords{ 5, 5 })) |c| {
-        var cell = c;
-        const l = GridCell.neighborCoords(&cell);
-        for (l) |opt| {
-            _ = opt orelse panic("should have all neighbors", .{});
-        }
+    var c = (cells.get(Coords{ 2, 2 })) orelse unreachable;
+    var cell = c;
+    const l = GridCell.neighborCoords(&cell);
+    for (l) |opt| {
+        _ = opt orelse panic("should have all neighbors, got: {any}\n", .{l});
     }
+
+    c = (cells.get(Coords{ 6, 4 })) orelse {
+        printMap(&cells);
+        unreachable;
+    };
 
     return;
 }
@@ -422,13 +415,15 @@ test "count test" {
         \\MSAMXMSMSA
         \\AMXSXMAAMM
         \\MSAMASMSMX
+        \\XMASAMXAMM
     ;
 
     const dims = getDims(input);
     var cells = strToCells(input, &dims, allocator);
     defer cells.deinit();
     const occ = allOccurences(&cells, "XMAS");
-    const exp: u32 = 3;
+    const exp: u32 = 6;
+    // expecting from 5.1 , 6.1, 7.5
     if (occ != exp) {
         panic("expected {d} got: {d}\n", .{ exp, occ });
     }

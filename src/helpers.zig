@@ -1,5 +1,14 @@
 const std = @import("std");
 
+pub fn posInString(ch: u8, str: *const []const u8) ?u32 {
+    for (str.*, 0..) |c, i| {
+        if (ch == c) {
+            const ret: u32 = @intCast(i);
+            return ret;
+        }
+    }
+    return null;
+}
 pub fn asciiByteToU32(byte: u8) ?u32 {
     switch (byte) {
         48...57 => {
